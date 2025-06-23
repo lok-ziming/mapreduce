@@ -4,7 +4,10 @@ import (
 	"fmt"
 	"hash/fnv"
 	"log"
+	"math/rand"
 	"net/rpc"
+	"os"
+	"time"
 )
 
 // Map functions return a slice of KeyValue.
@@ -24,12 +27,38 @@ func ihash(key string) int {
 // main/mrworker.go calls this function.
 func Worker(mapf func(string, string) []KeyValue,
 	reducef func(string, []string) string) {
-
 	// Your worker implementation here.
+	interval := rand.Intn(1000)
+	for {
+		<-time.After(time.Duration(interval) * time.Millisecond)
+		err := Run(mapf, reducef)
+		if err != nil {
+			interval = min(10000, interval*2)
+			continue
+		}
 
-	CallExample()
-	// uncomment to send the Example RPC to the coordinator.
-	// CallExample()
+	}
+
+}
+
+func Run(mapf func(string, string) []KeyValue,
+	reducef func(string, []string) string) error {
+	args := GetTaskArgs{}
+	reply := GetTaskReply{}
+	ok := call("Coordinator.GetTask", &args, &reply)
+	if !ok || reply.Task.Id == -1 {
+		return fmt.Errorf("no task available")
+	}
+	if Map == reply.Task.Type {
+		content, err := os.ReadFile(reply.Task.Files[0])
+		if err != nil {
+			return fmt.Errorf("failed to read file %s", reply.Task.Files[0])
+		}
+		mapf(reply.Task.Files[0], string(content))
+
+	} else if Reduce == reply.Task.Type {
+		log.Printf("Received Reduce Task: %v\n", reply.Task.Id)
+	}
 
 }
 

@@ -77,8 +77,8 @@ type Coordinator struct {
 	reduceTasks     []*Task
 	reduceCh        chan *Task
 	mainCh          chan *TaskResult
-	allMapTasksDone bool
-	allTasksDone    bool
+	MapTasksDone    int
+	ReduceTasksDone int
 }
 
 // Your code here -- RPC handlers for the worker to call.
@@ -93,14 +93,14 @@ func (c *Coordinator) Example(args *ExampleArgs, reply *ExampleReply) error {
 
 func (c *Coordinator) GetTask(args *GetTaskArgs, reply *GetTaskReply) error {
 
-	switch {
-	case !c.allMapTasksDone:
+	if c.MapTasksDone < len(c.mapTasks) {
 		task := c.GetMapTask()
 		reply.Task = *task
-	case c.allMapTasksDone:
+	} else if c.ReduceTasksDone < len(c.reduceTasks) {
 		task := c.GetReduceTask()
 		reply.Task = *task
 	}
+	reply.Task = Task{Id: -1}
 	return nil
 }
 
@@ -206,7 +206,7 @@ func (c *Coordinator) TaskMonitor() {
 // if the entire job has finished.
 func (c *Coordinator) Done() bool {
 	// Your code here.
-	ret := c.allTasksDone
+	ret := c.MapTasksDone == len(c.mapTasks) && c.ReduceTasksDone == len(c.reduceTasks)
 	return ret
 }
 

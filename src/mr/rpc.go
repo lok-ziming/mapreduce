@@ -32,6 +32,10 @@ type GetTaskReply struct {
 	Task Task
 }
 
+type SetTaskResultArgs struct {
+	TaskResult TaskResult
+}
+
 // Cook up a unique-ish UNIX-domain socket name
 // in /var/tmp, for the coordinator.
 // Can't use the current directory since
