@@ -29,11 +29,21 @@ type GetTaskArgs struct {
 }
 
 type GetTaskReply struct {
-	Task Task
+	Task    Task
+	nReduce int
 }
 
 type SetTaskResultArgs struct {
 	TaskResult TaskResult
+}
+
+func (task *Task) TaskResult() TaskResult {
+	return TaskResult{
+		Id:      task.Id,
+		Type:    task.Type,
+		Version: task.Version,
+		Status:  task.Status,
+	}
 }
 
 // Cook up a unique-ish UNIX-domain socket name

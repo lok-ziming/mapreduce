@@ -7,8 +7,11 @@ import (
 	"math/rand"
 	"net/rpc"
 	"os"
+	"sync"
 	"time"
 )
+
+const midResult = "mr-%d-%d"
 
 // Map functions return a slice of KeyValue.
 type KeyValue struct {
@@ -32,7 +35,9 @@ func Worker(mapf func(string, string) []KeyValue,
 	for {
 		<-time.After(time.Duration(interval) * time.Millisecond)
 		err := Run(mapf, reducef)
-		if err != nil {
+		if err.Error() == "master is not available" {
+
+		} else if err != nil {
 			interval = min(10000, interval*2)
 			continue
 		}
@@ -46,6 +51,9 @@ func Run(mapf func(string, string) []KeyValue,
 	args := GetTaskArgs{}
 	reply := GetTaskReply{}
 	ok := call("Coordinator.GetTask", &args, &reply)
+	if !ok {
+		return fmt.Errorf("master is not available")
+	}
 	if !ok || reply.Task.Id == -1 {
 		return fmt.Errorf("no task available")
 	}
@@ -54,12 +62,54 @@ func Run(mapf func(string, string) []KeyValue,
 		if err != nil {
 			return fmt.Errorf("failed to read file %s", reply.Task.Files[0])
 		}
-		mapf(reply.Task.Files[0], string(content))
+		kv := mapf(reply.Task.Files[0], string(content))
+		kvs := make([][]KeyValue, reply.nReduce)
+		for i := range kvs {
+			kvs[i] = make([]KeyValue, 0, 10)
+		}
+		for _, iter := range kv {
+			reduceTaskId := ihash(iter.Key) % reply.nReduce
+			kvs[reduceTaskId] = append(kvs[reduceTaskId], iter)
+		}
+		var wg sync.WaitGroup
+		mid := make([]string, reply.nReduce)
+		for i, kv := range kvs {
+			if len(kv) == 0 {
+				continue
+			}
+			fileName := fmt.Sprintf(midResult, reply.Task.Id, i)
+			mid = append(mid, fileName)
+			go func(kv []KeyValue, fileName string) {
+				wg.Add(1)
+				defer wg.Done()
+
+				file, err := os.OpenFile(fileName, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+				if err != nil {
+					log.Printf("failed to create file %s: %v", fileName, err)
+					return
+				}
+				for _, iter := range kv {
+					fmt.Fprintf(file, "%s %s\n", iter.Key, iter.Value)
+				}
+				file.Close()
+			}(kv, fileName)
+		}
+		wg.Wait()
+		taskResult := SetTaskResultArgs{
+			TaskResult: TaskResult{
+				Id:      reply.Task.Id,
+				Type:    reply.Task.Type,
+				Version: reply.Task.Version,
+				Status:  Finished,
+				Result:  mid,
+			},
+		}
+		ok = call("Coordinator.SetTaskResult", &taskResult, &GetTaskReply{})
 
 	} else if Reduce == reply.Task.Type {
 		log.Printf("Received Reduce Task: %v\n", reply.Task.Id)
 	}
-
+	return nil
 }
 
 // example function to show how to make an RPC call to the coordinator.

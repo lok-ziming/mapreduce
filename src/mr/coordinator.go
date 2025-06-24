@@ -57,7 +57,7 @@ type TaskResult struct {
 	Type    TaskType
 	Version int
 	Status  TaskStatus
-	Result  string
+	Result  []string
 }
 
 func newTask(id int, files []string) *Task {
