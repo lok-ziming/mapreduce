@@ -54,7 +54,7 @@ func Run(mapf func(string, string) []KeyValue,
 	if !ok {
 		return fmt.Errorf("master is not available")
 	}
-	if !ok || reply.Task.Id == -1 {
+	if reply.Task.Id == -1 {
 		return fmt.Errorf("no task available")
 	}
 	if Map == reply.Task.Type {
@@ -79,23 +79,22 @@ func Run(mapf func(string, string) []KeyValue,
 			}
 			fileName := fmt.Sprintf(midResult, reply.Task.Id, i)
 			mid = append(mid, fileName)
+			wg.Add(1)
 			go func(kv []KeyValue, fileName string) {
-				wg.Add(1)
 				defer wg.Done()
-
 				file, err := os.OpenFile(fileName, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 				if err != nil {
 					log.Printf("failed to create file %s: %v", fileName, err)
 					return
 				}
+				defer file.Close()
 				for _, iter := range kv {
 					fmt.Fprintf(file, "%s %s\n", iter.Key, iter.Value)
 				}
-				file.Close()
 			}(kv, fileName)
 		}
 		wg.Wait()
-		taskResult := SetTaskResultArgs{
+		taskResult := SetTaskArgs{
 			TaskResult: TaskResult{
 				Id:      reply.Task.Id,
 				Type:    reply.Task.Type,
@@ -104,8 +103,10 @@ func Run(mapf func(string, string) []KeyValue,
 				Result:  mid,
 			},
 		}
-		ok = call("Coordinator.SetTaskResult", &taskResult, &GetTaskReply{})
-
+		ok = call("Coordinator.SetTaskResult", &taskResult, &SetTaskReply{})
+		if !ok {
+			return fmt.Errorf("master is not available")
+		}
 	} else if Reduce == reply.Task.Type {
 		log.Printf("Received Reduce Task: %v\n", reply.Task.Id)
 	}

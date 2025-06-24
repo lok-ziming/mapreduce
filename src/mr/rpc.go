@@ -33,17 +33,11 @@ type GetTaskReply struct {
 	nReduce int
 }
 
-type SetTaskResultArgs struct {
+type SetTaskArgs struct {
 	TaskResult TaskResult
 }
 
-func (task *Task) TaskResult() TaskResult {
-	return TaskResult{
-		Id:      task.Id,
-		Type:    task.Type,
-		Version: task.Version,
-		Status:  task.Status,
-	}
+type SetTaskReply struct {
 }
 
 // Cook up a unique-ish UNIX-domain socket name

@@ -130,7 +130,6 @@ func (c *Coordinator) GetReduceTask() *Task {
 }
 
 func (c *Coordinator) TaskWithTimeout(task *Task) {
-
 	select {
 	case <-time.After(10 * time.Second):
 		c.mainCh <- &TaskResult{
@@ -139,8 +138,9 @@ func (c *Coordinator) TaskWithTimeout(task *Task) {
 			Version: task.Version,
 			Status:  Timeout,
 		}
-	case t := <-task.DoneChan:
-		log.Printf("Task Done %s:%d", t.Type.String(), t.Id)
+	case <-task.DoneChan:
+		log.Printf("Task %s:%d:%d finish", task.Type.String(), task.Id, task.Version)
+		return
 	}
 }
 
@@ -171,8 +171,8 @@ func (c *Coordinator) TaskMonitor() {
 			continue
 		}
 		if Finished == dstTask.Status || dstTask.Version != task.Version {
-			log.Printf("Task result %s:%d has been Expired or Task is already finished: %v",
-				task.Type.String(), task.Id, dstTask)
+			log.Printf("Task result %s:%d:%d has been Expired or Task is already finished: %v",
+				task.Type.String(), task.Id, task.Version, dstTask)
 			continue
 		}
 		if Timeout == task.Status || Failed == task.Status {
@@ -193,7 +193,8 @@ func (c *Coordinator) TaskMonitor() {
 			dstTask.Status = Finished
 			close(dstTask.DoneChan)
 			if Map == dstTask.Type {
-				log.Printf("Map task %d finished, checking if all map tasks are done", task.Id)
+				c.MapTasksDone++
+				log.Printf("create reduce task %d finished", task.Id)
 			} else if Reduce == dstTask.Type {
 				log.Printf("Reduce task %d finished, checking if all tasks are done", task.Id)
 			}
@@ -229,7 +230,7 @@ func MakeCoordinator(files []string, nReduce int) *Coordinator {
 		c.mapTasks = append(c.mapTasks, task)
 		c.mapCh <- task
 	}
-
+	go c.TaskMonitor()
 	c.server()
 	return &c
 }
